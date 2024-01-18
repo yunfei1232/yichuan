@@ -1,0 +1,79 @@
+import array
+import random
+import numpy
+from deap import algorithms, base, creator, tools
+import matplotlib.pyplot as plt
+
+# 创建适应度类和个体类
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", array.array, typecode='b', fitness=creator.FitnessMax)
+
+# 创建工具箱
+toolbox = base.Toolbox()
+
+# 注册属性生成器
+toolbox.register("attr_bool", random.randint, 0, 1)
+
+# 注册个体和种群生成器
+toolbox.register("individual", tools.initRepeat, creator.Individual, toolbox.attr_bool, 100)
+toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+
+# 注册评估函数和遗传算法运算符
+def evalOneMax(individual):
+    return sum(individual),
+
+toolbox.register("evaluate", evalOneMax)
+toolbox.register("mate", tools.cxTwoPoint)
+toolbox.register("mutate", tools.mutFlipBit, indpb=0.005)
+toolbox.register("select", tools.selRoulette)
+
+
+def main():
+    random.seed(64)
+    hall_of_fame_size = 10
+
+    pop = toolbox.population(n=200)
+    hof = tools.HallOfFame(1)
+    stats = tools.Statistics(lambda ind: ind.fitness.values)
+    stats.register("avg", numpy.mean)
+    stats.register("std", numpy.std)
+    stats.register("min", numpy.min)
+    stats.register("max", numpy.max)
+
+    # 存储每一代的最佳适应度值和平均适应度值
+    gen_max = []
+    gen_avg = []
+    best_over_avg = []  # 存储Best Fitness除以Average Fitness
+
+    hof = tools.HallOfFame(hall_of_fame_size)
+
+    pop, log = algorithms.eaSimple(pop, toolbox, cxpb=0.5, mutpb=0.2, ngen=50,
+                                   stats=stats, halloffame=hof, verbose=True)
+
+    print("Hall of Fame Individuals = ", *hof.items, sep="\n")
+    print("Best Ever Individual = ", hof.items[0])
+
+    # 提取每一代的最佳适应度值和平均适应度值
+    for entry in log:
+        gen = entry['gen']
+        fit_max = entry['max']  # 提取最大适应度值
+        fit_avg = entry['avg']  # 提取平均适应度值
+        gen_max.append((gen, fit_max))
+        gen_avg.append((gen, fit_avg))
+        best_over_avg.append((gen, fit_max / fit_avg))  # 计算Best Fitness除以Average Fitness并存储
+
+    # 绘制演化过程的图表
+    plt.figure(figsize=(10, 5))
+    plt.plot(*zip(*gen_max), label='Best Fitness')
+    plt.plot(*zip(*gen_avg), label='Average Fitness', linestyle='--')
+    plt.title('Evolutionary Process')
+    plt.xlabel('Generation')
+    plt.ylabel('Best Fitness / Average Fitness')  # 修改纵坐标标签
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    return pop, log, hof
+
+if __name__ == "__main__":
+    main()
