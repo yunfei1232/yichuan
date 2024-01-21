@@ -1,0 +1,97 @@
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+import tkinter as tk
+
+# 创建Tkinter应用程序
+root = tk.Tk()
+
+# 设置Tkinter的默认字体为支持汉字的字体，例如"微软雅黑"
+root.option_add("*Font", "Microsoft YaHei")
+class Particle:
+    def __init__(self, num_cities):
+        self.route = np.random.permutation(num_cities)
+        self.pbest = self.route.copy()
+        self.velocity = np.zeros(num_cities)
+
+    def update_velocity(self, gbest, w=0.5, c1=1, c2=1):
+        cognitive = c1 * random.random() * (self.pbest - self.route)
+        social = c2 * random.random() * (gbest - self.route)
+        self.velocity = w * self.velocity + cognitive + social
+
+    def update_position(self):
+        # Apply velocity updates as swaps in the route
+        num_cities = len(self.route)
+        for i in range(num_cities):
+            if random.random() < abs(self.velocity[i]):
+                swap_idx = (i + 1) % num_cities
+                self.route[i], self.route[swap_idx] = self.route[swap_idx], self.route[i]
+
+class ParticleSwarmOptimization:
+    def __init__(self, cities_coordinates, num_particles=30, generations=100, c1=1, c2=1, w=0.5):
+        self.num_cities = len(cities_coordinates)
+        self.cities_coordinates = np.array(cities_coordinates)
+        self.num_particles = num_particles
+        self.generations = generations
+        self.c1 = c1
+        self.c2 = c2
+        self.w = w
+        self.particles = [Particle(self.num_cities) for _ in range(num_particles)]
+        self.gbest = min(self.particles, key=lambda p: self.calculate_distance(p.route)).route
+        self.gbest_distance = self.calculate_distance(self.gbest)
+
+    def calculate_distance(self, route):
+        total_distance = 0
+        for i in range(self.num_cities):
+            start = self.cities_coordinates[route[i]]
+            end = self.cities_coordinates[route[(i + 1) % self.num_cities]]
+            total_distance += np.linalg.norm(start - end)
+        return total_distance
+
+    def optimize(self):
+        for _ in range(self.generations):
+            for particle in self.particles:
+                particle.update_velocity(self.gbest, self.w, self.c1, self.c2)
+                particle.update_position()
+                current_distance = self.calculate_distance(particle.route)
+                if current_distance < self.calculate_distance(particle.pbest):
+                    particle.pbest = particle.route.copy()
+                    if current_distance < self.gbest_distance:
+                        self.gbest = particle.route.copy()
+                        self.gbest_distance = current_distance
+
+# 假设你有城市坐标列表
+cities_coordinates = [(41, 94), (37, 84), (54, 67), (25, 62), (7, 64),
+                      (2, 99), (68, 58), (71, 44), (54, 62), (83, 69)]
+
+# 创建粒子群优化对象并运行算法
+pso = ParticleSwarmOptimization(cities_coordinates)
+pso.optimize()
+
+# 获取最佳路线和距离
+best_route = pso.gbest
+best_distance = pso.gbest_distance
+
+# 绘制最佳路线
+best_route_coordinates = [cities_coordinates[i] for i in best_route]
+
+plt.figure(figsize=(10, 6))
+plt.plot(*zip(*best_route_coordinates), 'o-', color='blue')
+plt.title(f"PSO 最佳路线 (距离: {best_distance:.2f})")
+plt.xlabel("X 坐标")
+plt.ylabel("Y 坐标")
+for i, city_coord in enumerate(best_route_coordinates):
+    plt.text(city_coord[0], city_coord[1], str(i+1))
+
+plt.show()
+
+print("最佳路线:", best_route)
+print("最短距离:", best_distance)
+
+# 启动Tkinter事件循环
+root.mainloop()
+
+
+
+
+
