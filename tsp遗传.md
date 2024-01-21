@@ -1,96 +1,93 @@
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy.spatial.distance import pdist, squareform
 import random
 
-# 假设的城市坐标
-cities = [(random.uniform(0, 100), random.uniform(0, 100)) for _ in range(10)]
+# City coordinates
+cities_coordinates = np.array([
+    (41, 94), (37, 84), (54, 67), (25, 62), (7, 64), 
+    (2, 99), (68, 58), (71, 44), (54, 62), (83, 69)
+])
 
-# 计算两城市间的欧几里得距离
-def distance(city1, city2):
-    return np.sqrt((city1[0] - city2[0])**2 + (city1[1] - city2[1])**2)
+# Calculate the distance matrix
+distance_matrix = squareform(pdist(cities_coordinates))
 
-# 评估路径的总距离
-def total_distance(path):
-    return sum(distance(cities[path[i]], cities[path[i - 1]]) for i in range(len(path)))
+# Genetic Algorithm
+class GeneticAlgorithm:
+    def __init__(self, distance_matrix, population_size=100, mutation_rate=0.01, generations=500):
+        self.distance_matrix = distance_matrix
+        self.population_size = population_size
+        self.mutation_rate = mutation_rate
+        self.generations = generations
+        self.num_cities = distance_matrix.shape[0]
+        self.population = [np.random.permutation(self.num_cities) for _ in range(population_size)]
+        self.best_distance = float('inf')
+        self.best_route = None
 
-# 初始化种群
-def init_population(size, num_cities):
-    return [random.sample(range(num_cities), num_cities) for _ in range(size)]
+    def evolve(self):
+        for generation in range(self.generations):
+            new_population = []
+            fitness_scores = self.calculate_fitness()
+            for _ in range(self.population_size):
+                parent1, parent2 = self.select_parents(fitness_scores)
+                offspring = self.crossover(parent1, parent2)
+                offspring = self.mutate(offspring)
+                new_population.append(offspring)
+            self.population = new_population
 
-# 选择函数
-def select(population, fitness):
-    # 轮盘赌选择
-    total_fit = sum(fitness)
-    relative_fitness = [f/total_fit for f in fitness]
-    probabilities = [sum(relative_fitness[:i+1]) for i in range(len(relative_fitness))]
-    chosen = []
-    for _ in range(len(population)):
-        r = random.random()
-        for (i, individual) in enumerate(population):
-            if r <= probabilities[i]:
-                chosen.append(individual)
-                break
-    return chosen
+            # Check for new best route
+            current_best_distance = min(fitness_scores)
+            if current_best_distance < self.best_distance:
+                self.best_distance = current_best_distance
+                self.best_route = self.population[np.argmin(fitness_scores)]
 
-# 交叉函数
-def crossover(parent1, parent2):
-    size = len(parent1)
-    cxpoint1, cxpoint2 = sorted(random.sample(range(size), 2))
-    child1 = parent1[:cxpoint1] + parent2[cxpoint1:cxpoint2] + parent1[cxpoint2:]
-    child2 = parent2[:cxpoint1] + parent1[cxpoint1:cxpoint2] + parent2[cxpoint2:]
-    # 修复重复的问题
-    fix_duplicate(child1, parent1, parent2)
-    fix_duplicate(child2, parent1, parent2)
-    return [child1, child2]
+    def calculate_fitness(self):
+        fitness_scores = []
+        for route in self.population:
+            distance = sum(self.distance_matrix[route[i], route[i + 1]] for i in range(-1, self.num_cities - 1))
+            fitness_scores.append(distance)
+        return fitness_scores
 
-# 修复重复问题的辅助函数
-def fix_duplicate(child, parent1, parent2):
-    counts = {i:0 for i in range(len(parent1))}
-    for city in child:
-        counts[city] += 1
-    for city, count in counts.items():
-        if count > 1:
-            for dup in filter(lambda x: counts[x] == 0, range(len(parent1))):
-                child[child.index(city)] = dup
-                counts[dup] = 1
-                break
+    def select_parents(self, fitness_scores):
+        fitness_probs = [1/f for f in fitness_scores]
+        total_fitness = sum(fitness_probs)
+        normalized_probs = [f/total_fitness for f in fitness_probs]
+        parents = np.random.choice(self.population_size, 2, p=normalized_probs, replace=False)
+        return self.population[parents[0]], self.population[parents[1]]
 
-# 变异函数
-def mutate(individual):
-    size = len(individual)
-    for _ in range(size):
-        if random.random() < 0.1:  # 变异概率
-            i, j = random.sample(range(size), 2)
-            individual[i], individual[j] = individual[j], individual[i]
+    def crossover(self, parent1, parent2):
+        crossover_point = np.random.randint(1, self.num_cities - 1)
+        child = [-1] * self.num_cities
+        child[:crossover_point] = parent1[:crossover_point]
+        for city in parent2:
+            if city not in child:
+                child[child.index(-1)] = city
+        return np.array(child)
 
-# 遗传算法主函数
-def genetic_algorithm():
-    population_size = 100
-    num_generations = 1000
-    num_cities = len(cities)
+    def mutate(self, route):
+        if np.random.rand() < self.mutation_rate:
+            swap_indices = np.random.choice(self.num_cities, 2, replace=False)
+            route[swap_indices[0]], route[swap_indices[1]] = route[swap_indices[1]], route[swap_indices[0]]
+        return route
 
-    # 初始化种群
-    population = init_population(population_size, num_cities)
+# Run Genetic Algorithm
+ga = GeneticAlgorithm(distance_matrix)
+ga.evolve()
 
-    for generation in range(num_generations):
-        # 计算适应度
-        fitness = [1/total_distance(individual) for individual in population]
+# Output the results
+best_route = ga.best_route
+best_distance = ga.best_distance
+best_route_coordinates = cities_coordinates[best_route]
 
-        # 选择
-        selected = select(population, fitness)
+# Plotting the best route
+plt.figure(figsize=(10, 6))
+plt.plot(best_route_coordinates[:, 0], best_route_coordinates[:, 1], 'o-', color='blue')
+plt.title(f"Best Route (Distance: {best_distance:.2f})")
+plt.xlabel("X Coordinate")
+plt.ylabel("Y Coordinate")
+for i, city in enumerate(best_route_coordinates):
+    plt.text(city[0], city[1], str(i+1))
 
-        # 生成下一代
-        population = []
-        for i in range(0, len(selected), 2):
-            population.extend(crossover(selected[i], selected[i+1]))
+plt.show()
 
-        # 变异
-        for individual in population:
-            mutate(individual)
-
-    # 找到最佳解
-    best_individual = min(population, key=total_distance)
-    return best_individual, total_distance(best_individual)
-
-best_path, best_distance = genetic_algorithm()
-print("最佳路径:", best_path)
-print("最短距离:", best_distance)
+(best_route, best_distance)
