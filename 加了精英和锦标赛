@@ -195,20 +195,4 @@ def plot_path_on_map(path, cities_coordinates):
         plt.text(cities_coordinates[city][0], cities_coordinates[city][1], str(city + 1))
 
     plt.xlabel('X Coordinate')
-    plt.ylabel('Y Coordinate')
-    plt.title('Optimal Transport Path')
-    plt.show()
-
-# 计算路线的总时间和总成本
-def calculate_total_time_and_cost(path, cost_matrix, time_matrix):
-    total_cost = sum(cost_matrix[path[i]][path[i + 1]] for i in range(len(path) - 1))
-    total_time = sum(time_matrix[path[i]][path[i + 1]] for i in range(len(path) - 1))
-    return total_cost, total_time
-
-# 绘制路线
-plot_path_on_map(best_path, cities_coordinates_updated)
-
-# 计算并输出总时间和总成本
-total_cost, total_time = calculate_total_time_and_cost(best_path, 成本矩阵更新, 时间矩阵更新)
-print(f"总运输成本: {total_cost}, 总运输时间: {total_time} 小时")
 
