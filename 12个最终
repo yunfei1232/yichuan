@@ -139,7 +139,7 @@ rail_timetable_windows = {
 air_transport_cost_per_km = 3.31  # 航空每公里成本，单位：元/吨·公里
 rail_transport_cost_per_km = 0.05  # 铁路每公里成本，单位：元/吨·公里
 air_speed_km_per_hour = 840  # 航空速度，单位：公里/小时
-rail_speed_km_per_hour = 90  # 铁路速度，单位：公里/小时
+rail_speed_km_per_hour = 100  # 铁路速度，单位：公里/小时
 cargo_weight = 5  # 货物重量，单位：吨
 
 inter_rail_transfer_cost = 1.3  # 铁路间转运成本，单位：元/吨
@@ -185,8 +185,7 @@ def sigmoid(x):
 
 def evaluate_individual(path, time_weight, cost_weight, co2_emission_weight):
     """评估个体的函数，返回评估分数。可以根据实际情况调整评估逻辑。"""
-    total_distance, total_cost, total_time, total_co2_emission, _, _, _, _, _, _, _ = calculate_total_distance_cost_and_time(
-        path)
+    total_distance, total_cost, total_time, total_co2_emission, _, _, _, _, _, _, _ = calculate_total_distance_cost_and_time(path)
 
     # 归一化时间、成本和二氧化碳排放量
     normalized_total_time = sigmoid(total_time)
@@ -194,9 +193,7 @@ def evaluate_individual(path, time_weight, cost_weight, co2_emission_weight):
     normalized_total_co2_emission = sigmoid(total_co2_emission)
 
     # 根据权重计算综合评分
-    score = (normalized_total_time * time_weight +
-             normalized_total_cost * cost_weight +
-             normalized_total_co2_emission * co2_emission_weight)
+    score = (normalized_total_time * time_weight +normalized_total_cost * cost_weight +normalized_total_co2_emission * co2_emission_weight)
 
     return score
 
@@ -204,7 +201,7 @@ def generate_individual():
     best_path = None
     best_score = float('inf')  # 使用无穷大初始化最佳得分
 
-    num_candidates = 150  # 每次生成的候选个体数
+    num_candidates = 30  # 每次生成的候选个体数
 
     for _ in range(num_candidates):
         path = ["city1"]
@@ -361,7 +358,7 @@ def calculate_total_distance_cost_and_time(path, start_time=21):
         total_cost += base_cost
 
         # Calculate CO2 emission
-        co2_emission = air_co2_emission_per_km_per_ton * distance * cargo_weight / 1000 if mode == "air" else rail_co2_emission_per_km_per_ton * distance * cargo_weight / 1000
+        co2_emission = air_co2_emission_per_km_per_ton * distance * cargo_weight  if mode == "air" else rail_co2_emission_per_km_per_ton * distance * cargo_weight
         total_co2_emission += co2_emission
 
         total_transport_time += time
@@ -698,35 +695,39 @@ if __name__ == "__main__":
     mutation_probability = 0.8  # 变异概率，决定是否进行变异操作的概率
     crossover_point_ratio = 0.1  # 交叉点在染色体（个体路径）长度的比例，用于确定交叉操作的位置
     mutation_points = 3  # 每次变异操作中变异点的数量，即在每次变异时随机交换的城市对数
-    cost_weight = 0.1
-    time_weight = 0.85
-    co2_emission_weight = 0.05
+    cost_weight = 0.3
+    time_weight = 0.5
+    co2_emission_weight = 0.2
     ga_regret_coefficient = 0.23  # GA的遗憾系数
     ssa_regret_coefficient = 0.25  # SSA的遗憾系数
     ssa_population_size = 150
 
-    # 运行算法
-    # 假设您已经定义了城市列表 city_list
-    pareto_front = genetic_algorithm_with_sparrows(population_size, num_generations, tournament_size,
-                                                   ssa_population_size,
-                                                   ga_regret_coefficient, ssa_regret_coefficient, city_list, transport_distances)
+    # 初始化一个列表来存储所有运行的Pareto解集
+    all_pareto_solutions = []
 
-    # 对 Pareto 最优解按适应度由大到小进行排序
-    pareto_front = sorted(pareto_front, key=lambda x: x.fitness, reverse=True)
+    # 运行算法8次
+    for run in range(8):
+        pareto_front = genetic_algorithm_with_sparrows(population_size, num_generations, tournament_size,
+                                                       ssa_population_size,
+                                                       ga_regret_coefficient, ssa_regret_coefficient, city_list,
+                                                       transport_distances)
+        # 将当前运行的Pareto解集添加到总列表中
+        all_pareto_solutions.extend(pareto_front)
 
-    # 去重处理，保留唯一的路径，并检查较高编号城市连接到较低编号城市的情况
-    unique_paths = []
-    for individual in pareto_front:
-        if individual.path not in [p.path for p in unique_paths]:
-            valid_path = True
-            for i in range(len(individual.path) - 1):
-                city_a = int(individual.path[i].replace("city", ""))
-                city_b = int(individual.path[i + 1].replace("city", ""))
-                if city_b < city_a:  # 检查是否存在较高编号城市连接到较低编号城市的情况
-                    valid_path = False
-                    break
-            if valid_path:
-                unique_paths.append(individual)
+    # 对所有解进行去重。这里我们使用一个字典来存储唯一的路径作为键，以及对应的个体作为值
+    unique_solutions = {}
+    for individual in all_pareto_solutions:
+        # 使用路径作为唯一性检查的基准
+        path_tuple = tuple(individual.path)
+        if path_tuple not in unique_solutions:
+            unique_solutions[path_tuple] = individual
+        else:
+            # 如果已有该路径，选择适应度更高的个体保留
+            if individual.fitness > unique_solutions[path_tuple].fitness:
+                unique_solutions[path_tuple] = individual
+
+    # 从字典中提取去重后的Pareto解集，并按适应度由高到低排序
+    final_pareto_solutions = sorted(unique_solutions.values(), key=lambda x: x.fitness, reverse=True)
 
     # 输出 Pareto 最优解集
     print("Pareto 最优解集：")
@@ -735,7 +736,7 @@ if __name__ == "__main__":
     transport_costs = []  # 运输总成本
     co2_emissions = []  # 碳排放量
 
-    for individual in unique_paths:
+    for individual in final_pareto_solutions:
         print(f"路径: {individual.path}, 适应度: {individual.fitness}")
 
         # 计算当前 Pareto 最优解的运输总成本、运输总距离和运输总时间
