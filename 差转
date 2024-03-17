@@ -233,24 +233,25 @@ def generate_individual():
 
     return best_path
 
-def calculate_transfer_time(previous_mode, current_mode, cargo_weight):
-    # 根据前后运输模式计算转运时间和转运成本
+def calculate_transfer_time(current_mode, next_mode, cargo_weight):
+    # 根据当前和之后运输模式计算转运时间和转运成本
     transfer_time, transfer_cost = 0, 0
-    if current_mode == "air":
-        if previous_mode == "air":
-            transfer_time = random.uniform(1.08, 1.5)
-            transfer_cost = inter_air_transfer_cost * cargo_weight
+    if next_mode == "air":
+        if current_mode == "air":
+            transfer_time = random.uniform(1.08, 1.5)  # 空运到空运的转运时间
+            transfer_cost = inter_air_transfer_cost * cargo_weight  # 空运到空运的转运成本
         else:
-            transfer_time = random.uniform(2.8, 3.42)
-            transfer_cost = inter_modal_transfer_cost * cargo_weight
-    else:  # 当前模式为铁路
-        if previous_mode == "air":
-            transfer_time = random.uniform(2.25, 2.67)
-            transfer_cost = inter_modal_transfer_cost * cargo_weight
+            transfer_time = random.uniform(2.25, 2.67)  # 地面运输到空运的转运时间
+            transfer_cost = inter_modal_transfer_cost * cargo_weight  # 地面运输到空运的转运成本
+    else:  # 下一个模式为铁路
+        if current_mode == "air":
+            transfer_time = random.uniform(2.8, 3.42)  # 空运到铁路的转运时间
+            transfer_cost = inter_modal_transfer_cost * cargo_weight  # 空运到铁路的转运成本
         else:
-            transfer_time = random.uniform(2.8, 3.42)
-            transfer_cost = inter_rail_transfer_cost * cargo_weight
+            transfer_time = random.uniform(2.8, 3.42)  # 铁路到铁路的转运时间
+            transfer_cost = inter_rail_transfer_cost * cargo_weight  # 铁路到铁路的转运成本
     return transfer_time, transfer_cost
+
 
 
 # 计算超时的惩罚成本
@@ -330,14 +331,10 @@ def calculate_total_distance_cost_and_time(path, start_time=21):
         # Special handling for the waiting time of the first segment
         initial_waiting_time = 0
         if i == 0:
-            initial_waiting_time_minutes = random.uniform(20, 30) if mode == "air" else random.uniform(10, 20)
+            initial_waiting_time_minutes = random.uniform(38, 75) if mode == "air" else random.uniform(25, 50)
             initial_waiting_time = max(initial_waiting_time_minutes / 60, 0.166)  # Ensure minimum waiting time
             waiting_times.append(initial_waiting_time)  # Add initial waiting time to the list
             total_waiting_time += initial_waiting_time  # Add to total waiting time
-
-        # Calculate the cumulative time increase from the second segment onwards
-        if i > 0:
-            cumulative_time += transfer_times[-1] + waiting_times[-1] + transshipment_waiting_times[-1]
 
         # Adjust departure time for air or rail modes
         adjusted_waiting_time = 0
@@ -348,9 +345,9 @@ def calculate_total_distance_cost_and_time(path, start_time=21):
             if route_key in departure_windows:
                 adjusted_time, adjusted_waiting_time = adjust_function(current_city, next_city, cumulative_time, departure_windows)
                 cumulative_time = adjusted_time
-                if i > 0 or adjusted_waiting_time > 0:  # Add adjusted waiting time if it's greater than the initial waiting time
-                    total_waiting_time += max(0, adjusted_waiting_time)  # Add only the positive difference
-                    waiting_times[-1] += max(0, adjusted_waiting_time)  # Update the last waiting time
+                if adjusted_waiting_time > 0:  # For the first segment, check if there's any adjusted waiting time
+                    total_waiting_time += max(0, adjusted_waiting_time)  # Add only the positive difference if it's the first segment or there's an actual adjustment
+                    waiting_times[-1] = initial_waiting_time + max(0, adjusted_waiting_time)  # Update the last waiting time
                 departure_times[-1] = format_time(cumulative_time)  # Update the last departure time
 
         total_distance += distance
@@ -358,7 +355,7 @@ def calculate_total_distance_cost_and_time(path, start_time=21):
         total_cost += base_cost
 
         # Calculate CO2 emission
-        co2_emission = air_co2_emission_per_km_per_ton * distance * cargo_weight  if mode == "air" else rail_co2_emission_per_km_per_ton * distance * cargo_weight
+        co2_emission = air_co2_emission_per_km_per_ton * distance * cargo_weight if mode == "air" else rail_co2_emission_per_km_per_ton * distance * cargo_weight
         total_co2_emission += co2_emission
 
         total_transport_time += time
@@ -370,34 +367,20 @@ def calculate_total_distance_cost_and_time(path, start_time=21):
             total_waiting_time += waiting_time
             waiting_times.append(waiting_time)
 
-            if i < len(path) - 1:
-                current_city = path[i]
-                next_city = path[i + 1]
-                next_segment_key = (current_city, next_city)
+            transshipment_waiting_time = 0
+            # Calculate transshipment waiting time based on next segment's information
+            transshipment_waiting_time_minutes = random.uniform(25, 50) if mode == "air" else random.uniform(38, 75)
+            transshipment_waiting_time = max(transshipment_waiting_time_minutes / 60, 0.166)
+            transshipment_waiting_times.append(transshipment_waiting_time)
 
-                # 获取下一段旅程的运输距离信息
-                next_segment_distances = transport_distances.get(next_segment_key, {})
-                next_distance_air = next_segment_distances.get("air", 0)
-                next_distance_rail = next_segment_distances.get("rail", 0)
-
-                # 基于下一段旅程的运输方式来设置transshipment_waiting_time_minutes
-                if next_distance_air > 0:  # 如果下一段旅程是航空运输
-                    transshipment_waiting_time_minutes = random.uniform(25, 50)
-                elif next_distance_rail > 0:  # 如果下一段旅程是铁路运输
-                    transshipment_waiting_time_minutes = random.uniform(38, 75)
-                else:  # 如果没有明确的下一段距离信息，可以设定一个默认等待时间
-                    transshipment_waiting_time_minutes = random.uniform(1, 2)  # 默认设置或其他逻辑
-
-                transshipment_waiting_time = max(transshipment_waiting_time_minutes / 60, 0.166)  # 确保最小转运等待时间
-                transshipment_waiting_times.append(transshipment_waiting_time)
-
+        # Calculate transfer time and cost if there's a previous mode
+        if previous_mode is not None:
             transfer_time, additional_transfer_cost = calculate_transfer_time(previous_mode, mode, cargo_weight)
             transfer_times.append(transfer_time)
             total_transfer_time += transfer_time
-
             total_cost += additional_transfer_cost
 
-        cumulative_time += time
+        cumulative_time += time + transshipment_waiting_time  # Include transshipment waiting time in the cumulative time for the next departure
         departure_times.append(format_time(cumulative_time))
 
         previous_mode = mode
